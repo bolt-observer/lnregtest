@@ -1,9 +1,9 @@
 lnd_config_template = \
     "[Application Options]\n" \
     "alias={name}\n" \
-    "listen=localhost:{lnd_port}\n" \
-    "restlisten=localhost:{rest_port}\n" \
-    "rpclisten=localhost:{rpc_port}\n" \
+    "listen=0.0.0.0:{lnd_port}\n" \
+    "restlisten=0.0.0.0:{rest_port}\n" \
+    "rpclisten=0.0.0.0:{rpc_port}\n" \
     "debuglevel=info\n" \
     "unsafe-disconnect=1\n" \
     "[Bitcoin]\n" \
@@ -13,7 +13,7 @@ lnd_config_template = \
     "bitcoin.basefee={base_fee_msat}\n" \
     "bitcoin.feerate={fee_rate}\n" \
     "[Bitcoind]\n" \
-    "bitcoind.rpchost=localhost\n" \
+    "bitcoind.rpchost=0.0.0.0\n" \
     "bitcoind.rpcuser=lnd\n" \
     "bitcoind.rpcpass=123456\n" \
     "bitcoind.zmqpubrawblock=tcp://127.0.0.1:28332\n" \
