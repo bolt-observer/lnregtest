@@ -8,8 +8,7 @@ WAIT_BEFORE_CLEANUP = 1
 WAIT_SYNC_BITCOIND = 1
 WAIT_SYNC_ELECTRUMX = 1
 
-common_path = os.path.dirname(os.path.realpath(__file__))
-root_path = os.path.join(common_path, '../../')
+root_path = '/tmp'
 
 logger_config = {
     'version': 1,
