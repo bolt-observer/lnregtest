@@ -6,6 +6,8 @@ lnd_config_template = \
     "rpclisten=0.0.0.0:{rpc_port}\n" \
     "debuglevel=info\n" \
     "unsafe-disconnect=1\n" \
+    "tlsextradomain=host.docker.internal\n" \
+    "tlsautorefresh=true\n" \
     "[Bitcoin]\n" \
     "bitcoin.active=1\n" \
     "bitcoin.regtest=1\n" \
