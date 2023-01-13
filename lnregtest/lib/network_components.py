@@ -779,9 +779,14 @@ class LND(LightningDaemon):
 
     def connect_and_openchannel(self, pubkey, host, local_sat, remote_sat):
         self._connect(pubkey, host)
-        info = self._openchannel(pubkey, local_sat, remote_sat)
-        funding_txid = info['funding_txid']
-        return funding_txid
+        # Retry logic since this fails on macs
+        for i in range(0, 100):
+            info = self._openchannel(pubkey, local_sat, remote_sat)
+            if info and 'funding_txid' in info:
+                funding_txid = info['funding_txid']
+                return funding_txid
+            else:
+                time.sleep(1)
 
     def disconnect(self, pubkey):
         logger.info("%s: Disconnecting %s.", self.name, pubkey)
