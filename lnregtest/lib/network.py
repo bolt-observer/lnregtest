@@ -16,7 +16,7 @@ from lnregtest.lib.common import (
     logger_config, WAIT_AFTER_MINING_THREE, WAIT_AFTER_ALL_LND_STARTED,
     WAIT_AFTER_FILLING_WALLETS, WAIT_BEFORE_CLEANUP
 )
-from lnregtest.lib.network_components import (Bitcoind, LND, LightningDaemon,
+from lnregtest.lib.network_components import (Bitcoind, LND, CLN, LightningDaemon,
                                               Electrum, ElectrumX)
 from lnregtest.lib.utils import format_dict, convert_short_channel_id_to_channel_id, bfh
 from lnregtest.lib.graph_testing import graph_test
@@ -27,6 +27,7 @@ logger.addHandler(logging.NullHandler())
 AVAILABLE_DAEMONS = {
     'lnd': LND,
     'electrum': Electrum,
+    'cln': CLN,
 }
 
 
@@ -124,10 +125,12 @@ class Network(object):
         # initialize lightning nodes
         self.running = False
 
-        self.ln_nodes: Mapping[str, Union[Electrum, LND]] = {}
+        self.ln_nodes: Mapping[str, Union[Electrum, LND, CLN]] = {}
         for node_name, node_properties in self.network_definition.items():
             if node_properties['daemon'] == 'electrum':
                 LNDaemon = Electrum
+            elif node_properties['daemon'] == 'cln':
+                LNDaemon = CLN
             else:
                 LNDaemon = LND
 

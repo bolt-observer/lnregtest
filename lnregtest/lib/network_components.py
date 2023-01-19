@@ -17,7 +17,8 @@ import re
 
 from .node_config_templates import (
     lnd_config_template,
-    bitcoind_config_template
+    bitcoind_config_template,
+    cln_config_template
 )
 from lnregtest.lib.utils import decode_byte_string_to_dict_or_str, convert_short_channel_id_to_channel_id, bfh
 
@@ -854,6 +855,12 @@ class LND(LightningDaemon):
         _, walletbalance = self.rpc(command)
         return walletbalance
 
+    def sendfunds(self, pubkey, sats):
+        logger.info("%s: Sending funds %d to %s.", self.name, sats, pubkey)
+        command = ['sendpayment', '--dest='+pubkey, '--amt='+str(sats), '--keysend']
+        returncode, _ = self.rpc(command)
+        return returncode == 0
+
 
 class Electrum(LightningDaemon):
     def __init__(self, name: str, node_properties: dict, nodes_folder: str,
@@ -962,7 +969,7 @@ class Electrum(LightningDaemon):
         """
         Deletes the electrum data directory of this node.
     """
-        logger.debug("%s: Cleaning up lnd data directory.", self.name)
+        logger.debug("%s: Cleaning up electrum data directory.", self.name)
         try:
             shutil.rmtree(self.data_dir)
         except FileNotFoundError:
@@ -1096,3 +1103,238 @@ class Electrum(LightningDaemon):
         command = ['walletbalance']
         _, walletbalance = self.rpc(command)
         return walletbalance
+
+
+class CLN(LightningDaemon):
+    def __init__(self, name, node_properties, nodes_folder,
+                 binary_folder=None):
+        super().__init__(name, node_properties, nodes_folder, binary_folder)
+
+        # network definitions
+        self.lnport = node_properties['port']
+
+        # take binaries from path, if no binary folder is given
+        if binary_folder is None:
+            binary_folder = ''
+        self.server_binary = os.path.join(binary_folder, 'lightningd')
+        self.rpc_binary = os.path.join(binary_folder, 'lightning-cli')
+
+        # check if executables can be found
+        if shutil.which(self.server_binary) is None:
+            raise FileNotFoundError(
+                f"lightningd executable not found: {self.server_binary}")
+        if shutil.which(self.rpc_binary) is None:
+            raise FileNotFoundError(
+                f"lightning-cli executable not found: {self.rpc_binary}")
+
+        self._cln_config_file = os.path.join(self.data_dir, 'config')
+
+        # lightning-cli
+        self.rpc_command = [
+            self.rpc_binary,
+            '--lightning-dir=' + self.data_dir,
+            '--network=regtest',
+        ]
+
+    def start(self, from_scratch=True):
+        """Start an CLN node.
+
+        :param from_scratch: bool
+        :return:
+        """
+
+        if from_scratch:
+            self.clear_directory()
+            self.setup_datadir()
+        else:
+            if not os.path.isdir(self.data_dir):
+                raise FileNotFoundError(
+                    '{}: CLN data directory not found '
+                    '(from_scratch = False).'.format(self.name))
+
+        command = [self.server_binary,
+                   '--lightning-dir=' + self.data_dir]
+
+        cmd = ' '.join(command)
+        logger.info("%s: Starting cln: %s ", self.name, cmd)
+
+        self.thread = threading.Thread(target=self.tail)
+        self.thread.daemon = False
+
+        # we start nonblocking with Popen
+        self.server_process = subprocess.Popen(command, stdout=subprocess.PIPE)
+        self.thread.start()
+        self.running = True
+
+        # we consider cln to be started, when it has scanned the chain
+        self.wait_for_log("Server started with public key")
+
+        return self.server_process
+
+    def stop(self):
+        self.rpc(['stop'])
+        logger.info('%s: stopped cln', self.name)
+        # should wait for the process to really stop
+        self.server_process.communicate()
+        # TODO: if this fails, force stop
+
+    def print_rpc_command(self):
+        """Prints the lightning-cli command to use in the shell for testing."""
+        cmd = ' '.join(self.rpc_command)
+        logger.info("%s:", self.name)
+        logger.info(cmd)
+
+    def setup_datadir(self):
+        """Sets up the cln data folder."""
+        pathlib.Path(self.data_dir).mkdir(parents=True, exist_ok=True)
+        config = cln_config_template.format(
+            name=self.name,
+            port=self.lnport
+        )
+
+        with open(self._cln_config_file, 'w') as f:
+            f.write(config)
+
+    def clear_directory(self):
+        """Deletes the lnd data directory of this node."""
+        logger.debug("%s: Cleaning up cln data directory.", self.name)
+        try:
+            shutil.rmtree(self.data_dir)
+        except FileNotFoundError:
+            logger.debug("%s: Directory already clean.", self.name)
+
+    def getinfo(self):
+        returncode, info = self.rpc(['getinfo'])
+        return info
+
+    def getaddress(self, address_type='p2wkh'):
+        returncode, address = self.rpc(['newaddr'])
+        return address['bech32']
+
+    def _connect(self, pubkey, host):
+        logger.info("%s: Connecting to %s", self.name, pubkey)
+        returncode, info = self.rpc(['connect', pubkey, host])
+        return info
+
+    # TODO: somehow unify sync and async apis
+    def _openchannel(self, pubkey, local_sat, remote_sat):
+        logger.info("%s: Open channel to %s", self.name, pubkey)
+
+        command = ['fundchannel', "id="+pubkey, "feerate=normal", "push_msat="+str(remote_sat), "amount="+str(local_sat)]
+        returncode, info = self.rpc(command)
+        if 'txid' in info:
+            info['funding_txid'] = info['txid']
+
+        return info
+
+    async def _a_openchannel(self, pubkey, local_sat, remote_sat):
+        logger.info("%s: Async open channel to %s", self.name, pubkey)
+        return self._openchannel(pubkey, local_sat, remote_sat)
+
+    def connect_and_openchannel(self, pubkey, host, local_sat, remote_sat):
+        self._connect(pubkey, host)
+        # Retry logic since this fails on macs
+        for i in range(0, 100):
+            info = self._openchannel(pubkey, local_sat, remote_sat)
+            if info and 'funding_txid' in info:
+                funding_txid = info['funding_txid']
+                return funding_txid
+            else:
+                time.sleep(1)
+
+    def disconnect(self, pubkey):
+        logger.info("%s: Disconnecting %s.", self.name, pubkey)
+        command = ['disconnect', pubkey]
+        returncode, info = self.rpc(command)
+        return info
+
+    def set_node_pubkey(self):
+        info = self.getinfo()
+        logger.info(
+            "%s: setting node public key to %s",
+            self.name, info['id'])
+        self.pubkey = info['id']
+
+    # Not supported yet
+    def _listchannels(self) -> List[ChannelState]:
+        command = ['listpeerchannels']
+        _, funds = self.rpc(command)
+        channel_states = []
+        for c in funds['channels']:
+            channel_states.append(ChannelState(
+                capacity=self.amount_convert(c['total_msat']),
+                channel_id=c['short_channel_id'],
+                commit_fee=0, # TODO
+                funding_txid=c['funding_txid'],
+                initiator=c['opener'] == 'local',
+                local_balance=self.amount_convert(c['to_us_msat']),
+                outpoint=c['funding_output'],
+                remote_balance=self.amount_convert(c['total_msat']) - self.amount_convert(c['to_us_msat']),
+                remote_pubkey=c['peer_id'],
+                state='OPEN'
+            ))
+        return channel_states
+     
+    def listchannels(self) -> List[ChannelState]:
+        command = ['listfunds']
+        _, funds = self.rpc(command)
+        channel_states = []
+        for c in funds['channels']:
+            channel_states.append(ChannelState(
+                capacity=self.amount_convert(c['amount_msat']),
+                channel_id=c['short_channel_id'],
+                commit_fee=0, # TODO
+                funding_txid=c['funding_txid'],
+                initiator=True, # TODO
+                local_balance=self.amount_convert(c['our_amount_msat']),
+                outpoint=c['funding_output'],
+                remote_balance=self.amount_convert(c['amount_msat']) - self.amount_convert(c['our_amount_msat']),
+                remote_pubkey=c['peer_id'],
+                state='OPEN'
+            ))
+        return channel_states
+
+
+    def updatechanpolicy(self, base_fee_msat, fee_rate, time_lock_delta=20,
+                         channel_point=None):
+        command = [
+            'updatechanpolicy', int(base_fee_msat), fee_rate, time_lock_delta]
+        if channel_point:
+            command += channel_point
+        returncode, info = self.rpc(command)
+        return info
+
+    def amount_convert(self, amount: str) -> int:
+        amount = amount.replace("msat", "")
+        amount = amount.replace("sat", "")
+        return int(amount)
+
+    def to_lnd_chanid(self, cln_chanid: str) -> int:
+        split = cln_chanid.split("x")
+        if len(split) != 3:
+            return 0
+        blockId = int(split[0])
+        txIdx = int(split[1])
+        outputIdx = int(split[2])
+ 
+        return  (blockId&0xffffff)<<40 | (txIdx&0xffffff)<<16 | (outputIdx & 0xffff)
+
+    def describegraph(self) -> List[ChannelInfo]:
+        command = ['listchannels']
+        _, networkinfo = self.rpc(command)
+        channels = []
+        for c in networkinfo['channels']:
+            # construct channel info
+            channel_info = ChannelInfo(
+                node1_key=c['source'],
+                node2_key=c['destination'],
+                channel_id=self.to_lnd_chanid(c['short_channel_id'])
+            )
+            channels.append(channel_info)
+        return channels
+    
+    def sendfunds(self, pubkey, sats):
+        logger.info("%s: Sending funds %d to %s.", self.name, sats, pubkey)
+        command = ['keysend', pubkey, sats*1000]
+        returncode, _ = self.rpc(command)
+        return returncode == 0

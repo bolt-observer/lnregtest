@@ -25,7 +25,7 @@ def test_allowed_node_implementations(nodes: Dict[str, Dict]):
     Tests if the daemon fields in the node definitions is from the
     supported set of daemons.
     """
-    allowed_nodes = {None, 'electrum', 'lnd'}  # None is lnd default
+    allowed_nodes = {None, 'electrum', 'lnd', 'cln'}  # None is lnd default
     present_nodes = set()
     for n in nodes.values():
         present_nodes.add(n.get('daemon'))

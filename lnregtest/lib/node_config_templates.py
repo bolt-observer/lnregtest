@@ -35,3 +35,18 @@ bitcoind_config_template = \
     "rpcuser=lnd\n" \
     "rpcpassword=123456\n" \
     "fallbackfee=0.00001000\n"
+
+cln_config_template = \
+    "alias={name}\n" \
+    "addr=:{port}\n" \
+    "bitcoin-rpcconnect=127.0.0.1\n" \
+    "bitcoin-rpcport=18443\n" \
+    "bitcoin-rpcuser=lnd\n" \
+    "bitcoin-rpcpassword=123456\n" \
+    "bitcoin-retry-timeout=3600\n" \
+    "network=regtest\n" \
+    "funding-confirms=1\n" \
+    "max-concurrent-htlcs=483\n" \
+    "experimental-offers\n" \
+    "experimental-dual-fund\n" \
+    "wumbo\n"
