@@ -14,6 +14,7 @@ lnd_config_template = \
     "bitcoin.node=bitcoind\n" \
     "bitcoin.basefee={base_fee_msat}\n" \
     "bitcoin.feerate={fee_rate}\n" \
+    "bitcoin.defaultchanconfs=1\n" \
     "[Bitcoind]\n" \
     "bitcoind.rpchost=0.0.0.0\n" \
     "bitcoind.rpcuser=lnd\n" \

@@ -1153,7 +1153,11 @@ class CLN(LightningDaemon):
                     '(from_scratch = False).'.format(self.name))
 
         command = [self.server_binary,
-                   '--lightning-dir=' + self.data_dir]
+                   '--lightning-dir=' + self.data_dir,
+                   '--dev-allow-localhost',
+                   '--dev-bitcoind-poll=1',
+                   '--dev-fast-gossip'
+                    ]
 
         cmd = ' '.join(command)
         logger.info("%s: Starting cln: %s ", self.name, cmd)
@@ -1220,7 +1224,7 @@ class CLN(LightningDaemon):
     def _openchannel(self, pubkey, local_sat, remote_sat):
         logger.info("%s: Open channel to %s", self.name, pubkey)
 
-        command = ['fundchannel', "id="+pubkey, "feerate=normal", "push_msat="+str(remote_sat), "amount="+str(local_sat)]
+        command = ['fundchannel', "id="+pubkey, "feerate=normal", "push_msat="+str(remote_sat*1000), "amount="+str(local_sat)]
         returncode, info = self.rpc(command)
         if 'txid' in info:
             info['funding_txid'] = info['txid']
@@ -1255,40 +1259,40 @@ class CLN(LightningDaemon):
             self.name, info['id'])
         self.pubkey = info['id']
 
-    # Not supported yet
-    def _listchannels(self) -> List[ChannelState]:
-        command = ['listpeerchannels']
-        _, funds = self.rpc(command)
-        channel_states = []
-        for c in funds['channels']:
-            channel_states.append(ChannelState(
-                capacity=self.amount_convert(c['total_msat']),
-                channel_id=c['short_channel_id'],
-                commit_fee=0, # TODO
-                funding_txid=c['funding_txid'],
-                initiator=c['opener'] == 'local',
-                local_balance=self.amount_convert(c['to_us_msat']),
-                outpoint=c['funding_output'],
-                remote_balance=self.amount_convert(c['total_msat']) - self.amount_convert(c['to_us_msat']),
-                remote_pubkey=c['peer_id'],
-                state='OPEN'
-            ))
-        return channel_states
-     
     def listchannels(self) -> List[ChannelState]:
+        command = ['listpeerchannels']
+        ok, funds = self.rpc(command)
+        if ok and 'code' not in funds:
+            channel_states = []
+            for c in funds['channels']:
+                channel_states.append(ChannelState(
+                    capacity=self.amount_convert(c['total_msat'])/1000,
+                    channel_id=self.to_lnd_chanid(c['short_channel_id']),
+                    commit_fee=0, # TODO
+                    funding_txid=c['funding_txid'],
+                    initiator=c['opener'] == 'local',
+                    local_balance=self.amount_convert(c['to_us_msat'])/1000,
+                    outpoint=c['funding_outnum'],
+                    remote_balance=(self.amount_convert(c['total_msat']) - self.amount_convert(c['to_us_msat']))/1000,
+                    remote_pubkey=c['peer_id'],
+                    state='OPEN'
+            ))
+            return channel_states
+
         command = ['listfunds']
         _, funds = self.rpc(command)
+
         channel_states = []
         for c in funds['channels']:
             channel_states.append(ChannelState(
-                capacity=self.amount_convert(c['amount_msat']),
-                channel_id=c['short_channel_id'],
+                capacity=self.amount_convert(c['amount_msat'])/1000,
+                channel_id=self.to_lnd_chanid(c['short_channel_id']),
                 commit_fee=0, # TODO
                 funding_txid=c['funding_txid'],
                 initiator=True, # TODO
-                local_balance=self.amount_convert(c['our_amount_msat']),
+                local_balance=self.amount_convert(c['our_amount_msat'])/1000,
                 outpoint=c['funding_output'],
-                remote_balance=self.amount_convert(c['amount_msat']) - self.amount_convert(c['our_amount_msat']),
+                remote_balance=(self.amount_convert(c['amount_msat']) - self.amount_convert(c['our_amount_msat']))/1000,
                 remote_pubkey=c['peer_id'],
                 state='OPEN'
             ))
@@ -1298,9 +1302,7 @@ class CLN(LightningDaemon):
     def updatechanpolicy(self, base_fee_msat, fee_rate, time_lock_delta=20,
                          channel_point=None):
         command = [
-            'updatechanpolicy', int(base_fee_msat), fee_rate, time_lock_delta]
-        if channel_point:
-            command += channel_point
+            'setchannel', 'all', int(base_fee_msat), fee_rate]
         returncode, info = self.rpc(command)
         return info
 
