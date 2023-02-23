@@ -28,6 +28,7 @@ Features
 * Arbitrary lightning network graphs with up to number of nodes on the order of
 10 (depends on your resources)
 * LND support
+* Core lightning support
 * Electrum support
 * Lightning graph state comparison
 * Restarting from already created networks
