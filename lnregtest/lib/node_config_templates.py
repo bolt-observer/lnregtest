@@ -35,7 +35,10 @@ bitcoind_config_template = \
     "regtest=1\n" \
     "rpcuser=lnd\n" \
     "rpcpassword=123456\n" \
-    "fallbackfee=0.00001000\n"
+    "fallbackfee=0.00001000\n" \
+    "regtest.rpcbind=0.0.0.0\n" \
+    "server=1\n" \
+    "rpcallowip=0.0.0.0/0\n"
 
 cln_config_template = \
     "alias={name}\n" \
