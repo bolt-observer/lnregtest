@@ -8,6 +8,8 @@ lnd_config_template = \
     "unsafe-disconnect=1\n" \
     "tlsextradomain=host.docker.internal\n" \
     "tlsautorefresh=true\n" \
+    "accept-keysend=1\n" \
+    "accept-amp=1\n" \
     "[Bitcoin]\n" \
     "bitcoin.active=1\n" \
     "bitcoin.regtest=1\n" \
