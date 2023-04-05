@@ -757,7 +757,7 @@ class LND(LightningDaemon):
         returncode, address = self.rpc(['newaddress', address_type])
         return address['address']
 
-    def _connect(self, pubkey, host):
+    def connect(self, pubkey, host):
         logger.info("%s: Connecting to %s", self.name, pubkey)
         address = pubkey + '@' + host
         returncode, info = self.rpc(['connect', address])
@@ -779,7 +779,7 @@ class LND(LightningDaemon):
         return info
 
     def connect_and_openchannel(self, pubkey, host, local_sat, remote_sat):
-        self._connect(pubkey, host)
+        self.connect(pubkey, host)
         # Retry logic since this fails on macs
         for i in range(0, 100):
             info = self._openchannel(pubkey, local_sat, remote_sat)
@@ -1215,7 +1215,7 @@ class CLN(LightningDaemon):
         returncode, address = self.rpc(['newaddr'])
         return address['bech32']
 
-    def _connect(self, pubkey, host):
+    def connect(self, pubkey, host):
         logger.info("%s: Connecting to %s", self.name, pubkey)
         returncode, info = self.rpc(['connect', pubkey, host])
         return info
@@ -1236,7 +1236,7 @@ class CLN(LightningDaemon):
         return self._openchannel(pubkey, local_sat, remote_sat)
 
     def connect_and_openchannel(self, pubkey, host, local_sat, remote_sat):
-        self._connect(pubkey, host)
+        self.connect(pubkey, host)
         # Retry logic since this fails on macs
         for i in range(0, 100):
             info = self._openchannel(pubkey, local_sat, remote_sat)

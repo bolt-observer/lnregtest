@@ -185,6 +185,11 @@ class Network(object):
             # finalize last channel
             self.bitcoind.mine_blocks(3)
             time.sleep(3)
+        else:
+            self.nodes_connect()
+            self.bitcoind.mine_blocks(1)
+            time.sleep(1)
+
 
         # show state of lightning nodes
         self.nodes_print_info()
@@ -331,6 +336,20 @@ class Network(object):
             logger.info("%s: %s", node_name, address)
             addresses.append(address)
         return addresses
+
+    def nodes_connect(self):
+        """
+        Connects every LN node with every other one
+        """
+        for node_name, node_instance in self.ln_nodes.items():
+          for other_node_name, _ in self.ln_nodes.items():
+            if node_name == other_node_name:
+              continue
+
+            node_pubkey = self.ln_nodes[other_node_name].pubkey
+            node_port = self.ln_nodes[other_node_name].lnport
+            node_host = 'localhost:{}'.format(node_port)
+            node_instance.connect(node_pubkey, node_host)
 
     def nodes_connect_open_channels(self):
         """
