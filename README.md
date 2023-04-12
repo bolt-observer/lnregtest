@@ -101,6 +101,16 @@ $ docker build -t lnregtest:local .
 $ docker run --rm -it lnregtest:local python3 -m unittest discover test
 ```
 
+### NOTE for ARM-based system users
+
+If you are using ARM-based system such as MacBook M1s and M2s, make sure to select `amd64` for your
+build command as followed
+
+```sh
+$ docker build -t lnregtest:local --platform linux/amd64 .
+...
+```
+
 Troubleshooting
 ---------------
 * `all SubConns are in TransientFailure`:
